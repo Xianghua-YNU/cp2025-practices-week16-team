@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+"""
+学生模板：热传导方程数值解法比较
+文件：heat_equation_methods_student.py
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import laplace
@@ -7,464 +13,534 @@ import time
 
 class HeatEquationSolver:
     """
-    A comprehensive solver for the 1D heat equation using multiple numerical methods.
+    热传导方程求解器，实现四种不同的数值方法。
     
-    The heat equation: du/dt = alpha * d²u/dx²
-    Boundary conditions: u(0,t) = 0, u(L,t) = 0
-    Initial condition: u(x,0) = phi(x)
+    求解一维热传导方程：du/dt = alpha * d²u/dx²
+    边界条件：u(0,t) = 0, u(L,t) = 0
+    初始条件：u(x,0) = phi(x)
     """
     
     def __init__(self, L=20.0, alpha=10.0, nx=21, T_final=25.0):
         """
-        Initialize the heat equation solver.
+        初始化热传导方程求解器。
         
-        Args:
-            L (float): Domain length [0, L]
-            alpha (float): Thermal diffusivity coefficient
-            nx (int): Number of spatial grid points
-            T_final (float): Final simulation time
+        参数:
+            L (float): 空间域长度 [0, L]
+            alpha (float): 热扩散系数
+            nx (int): 空间网格点数
+            T_final (float): 最终模拟时间
         """
         self.L = L
         self.alpha = alpha
         self.nx = nx
         self.T_final = T_final
         
-        # Spatial grid
+        # 空间网格
         self.x = np.linspace(0, L, nx)
         self.dx = L / (nx - 1)
         
-        # Initialize solution array
+        # 初始化解数组
         self.u_initial = self._set_initial_condition()
         
     def _set_initial_condition(self):
         """
-        Set the initial condition: u(x,0) = 1 for 10 <= x <= 11, 0 otherwise.
+        设置初始条件：u(x,0) = 1 当 10 <= x <= 11，否则为 0。
         
-        Returns:
-            np.ndarray: Initial temperature distribution
+        返回:
+            np.ndarray: 初始温度分布
         """
-        u0 = np.zeros(self.nx)
-        mask = (self.x >= 10) & (self.x <= 11)
-        u0[mask] = 1.0
-        # Apply boundary conditions
-        u0[0] = 0.0
-        u0[-1] = 0.0
-        return u0
-        
-def solve_explicit(self, dt=0.01, plot_times=None):
+        u = np.zeros(self.nx)
+        # 设置初始条件（10 <= x <= 11 区域为1）
+        u[(self.x >= 10) & (self.x <= 11)] = 1.0
+        # 应用边界条件
+        u[0] = 0.0
+        u[-1] = 0.0
+        return u
+    
+    def solve_explicit(self, dt=0.01, plot_times=None):
         """
-        Solve using explicit finite difference method (FTCS).
+        使用显式有限差分法（FTCS）求解。
         
-        Args:
-            dt (float): Time step size
-            plot_times (list): Time points for plotting
+        参数:
+            dt (float): 时间步长
+            plot_times (list): 绘图时间点
             
-        Returns:
-            dict: Solution data including time points and temperature arrays
+        返回:
+            dict: 包含时间点和温度数组的解数据
         """
         if plot_times is None:
             plot_times = [0, 1, 5, 15, 25]
             
-        # Stability check
+        # 计算稳定性参数
         r = self.alpha * dt / (self.dx**2)
-        if r > 0.5:
-            print(f"Warning: Stability condition violated! r = {r:.4f} > 0.5")
-            print(f"Consider reducing dt to < {0.5 * self.dx**2 / self.alpha:.6f}")
         
-        # Initialize
+        # 检查稳定性条件
+        if r > 0.5:
+            print(f"警告: 显式方法稳定性条件不满足 (r={r:.4f} > 0.5)")
+        
+        # 初始化解数组
         u = self.u_initial.copy()
         t = 0.0
-        nt = int(self.T_final / dt) + 1
         
-        # Storage for results
-        results = {'times': [], 'solutions': [], 'method': 'Explicit FTCS'}
+        # 结果存储字典
+        result = {
+            'times': [],
+            'solutions': [],
+            'method': 'Explicit FTCS',
+            'dt': dt,
+            'r': r,
+            'time_elapsed': 0.0
+        }
         
-        # Store initial condition
+        # 存储初始条件
         if 0 in plot_times:
-            results['times'].append(0.0)
-            results['solutions'].append(u.copy())
+            result['times'].append(t)
+            result['solutions'].append(u.copy())
         
         start_time = time.time()
         
-        # Time stepping
-        for n in range(1, nt):
-            # Apply Laplacian using scipy.ndimage.laplace
-            du_dt = r * laplace(u)
-            u += du_dt
+        # 时间步进循环
+        while t < self.T_final:
+            # 计算下一个时间步
+            if t + dt > self.T_final:
+                dt = self.T_final - t
+                r = self.alpha * dt / (self.dx**2)
             
-            # Apply boundary conditions
+            # 使用laplace计算空间二阶导数
+            d2u = laplace(u, mode='nearest') / (self.dx**2)
+            
+            # 更新解
+            u += r * d2u
+            
+            # 应用边界条件
             u[0] = 0.0
             u[-1] = 0.0
             
-            t = n * dt
+            t += dt
             
-            # Store solution at specified times
-            for plot_time in plot_times:
-                if abs(t - plot_time) < dt/2 and plot_time not in [res_t for res_t in results['times']]:
-                    results['times'].append(t)
-                    results['solutions'].append(u.copy())
+            # 存储指定时间点的解
+            for pt in plot_times:
+                if abs(t - pt) < dt/2 and pt not in result['times']:
+                    result['times'].append(t)
+                    result['solutions'].append(u.copy())
         
-        results['computation_time'] = time.time() - start_time
-        results['stability_parameter'] = r
+        end_time = time.time()
+        result['time_elapsed'] = end_time - start_time
         
-        return results
+        return result
     
     def solve_implicit(self, dt=0.1, plot_times=None):
         """
-        Solve using implicit finite difference method (BTCS).
+        使用隐式有限差分法（BTCS）求解。
         
-        Args:
-            dt (float): Time step size
-            plot_times (list): Time points for plotting
+        参数:
+            dt (float): 时间步长
+            plot_times (list): 绘图时间点
             
-        Returns:
-            dict: Solution data including time points and temperature arrays
+        返回:
+            dict: 包含时间点和温度数组的解数据
         """
         if plot_times is None:
             plot_times = [0, 1, 5, 15, 25]
             
-        # Parameters
+        # 计算扩散数
         r = self.alpha * dt / (self.dx**2)
-        nt = int(self.T_final / dt) + 1
         
-        # Initialize
+        # 构建三对角矩阵
+        main_diag = np.ones(self.nx - 2) * (1 + 2*r)
+        off_diag = np.ones(self.nx - 3) * (-r)
+        
+        # 创建带状矩阵表示
+        A = np.zeros((3, self.nx - 2))
+        A[0, 1:] = off_diag  # 上对角线
+        A[1, :] = main_diag   # 主对角线
+        A[2, :-1] = off_diag  # 下对角线
+        
+        # 初始化解数组
         u = self.u_initial.copy()
+        t = 0.0
         
-        # Build tridiagonal matrix for internal nodes
-        num_internal = self.nx - 2
-        banded_matrix = np.zeros((3, num_internal))
-        banded_matrix[0, 1:] = -r  # Upper diagonal
-        banded_matrix[1, :] = 1 + 2*r  # Main diagonal
-        banded_matrix[2, :-1] = -r  # Lower diagonal
+        # 结果存储字典
+        result = {
+            'times': [],
+            'solutions': [],
+            'method': 'Implicit BTCS',
+            'dt': dt,
+            'r': r,
+            'time_elapsed': 0.0
+        }
         
-        # Storage for results
-        results = {'times': [], 'solutions': [], 'method': 'Implicit BTCS'}
-        
-        # Store initial condition
+        # 存储初始条件
         if 0 in plot_times:
-            results['times'].append(0.0)
-            results['solutions'].append(u.copy())
+            result['times'].append(t)
+            result['solutions'].append(u.copy())
         
         start_time = time.time()
         
-        # Time stepping
-        for n in range(1, nt):
-            # Right-hand side (internal nodes only)
+        # 时间步进循环
+        while t < self.T_final:
+            if t + dt > self.T_final:
+                dt = self.T_final - t
+                r = self.alpha * dt / (self.dx**2)
+            
+            # 构建右端项（内部节点）
             rhs = u[1:-1].copy()
             
-            # Solve tridiagonal system
-            u_internal_new = scipy.linalg.solve_banded((1, 1), banded_matrix, rhs)
+            # 求解三对角系统
+            u_internal = scipy.linalg.solve_banded((1, 1), A, rhs)
             
-            # Update solution
-            u[1:-1] = u_internal_new
-            u[0] = 0.0  # Boundary conditions
+            # 更新解
+            u[1:-1] = u_internal
+            
+            # 应用边界条件
+            u[0] = 0.0
             u[-1] = 0.0
             
-            t = n * dt
+            t += dt
             
-            # Store solution at specified times
-            for plot_time in plot_times:
-                if abs(t - plot_time) < dt/2 and plot_time not in [res_t for res_t in results['times']]:
-                    results['times'].append(t)
-                    results['solutions'].append(u.copy())
+            # 存储指定时间点的解
+            for pt in plot_times:
+                if abs(t - pt) < dt/2 and pt not in result['times']:
+                    result['times'].append(t)
+                    result['solutions'].append(u.copy())
         
-        results['computation_time'] = time.time() - start_time
-        results['stability_parameter'] = r
+        end_time = time.time()
+        result['time_elapsed'] = end_time - start_time
         
-        return results
-
-def solve_crank_nicolson(self, dt=0.5, plot_times=None):
+        return result
+    
+    def solve_crank_nicolson(self, dt=0.5, plot_times=None):
         """
-        Solve using Crank-Nicolson method.
+        使用Crank-Nicolson方法求解。
         
-        Args:
-            dt (float): Time step size
-            plot_times (list): Time points for plotting
+        参数:
+            dt (float): 时间步长
+            plot_times (list): 绘图时间点
             
-        Returns:
-            dict: Solution data including time points and temperature arrays
+        返回:
+            dict: 包含时间点和温度数组的解数据
         """
         if plot_times is None:
             plot_times = [0, 1, 5, 15, 25]
             
-        # Parameters
+        # 计算扩散数
         r = self.alpha * dt / (self.dx**2)
-        nt = int(self.T_final / dt) + 1
         
-        # Initialize
+        # 构建左端矩阵 A（内部节点）
+        main_diag = np.ones(self.nx - 2) * (1 + r)
+        off_diag = np.ones(self.nx - 3) * (-r/2)
+        
+        # 创建带状矩阵表示
+        A = np.zeros((3, self.nx - 2))
+        A[0, 1:] = off_diag  # 上对角线
+        A[1, :] = main_diag  # 主对角线
+        A[2, :-1] = off_diag  # 下对角线
+        
+        # 初始化解数组
         u = self.u_initial.copy()
+        t = 0.0
         
-        # Build coefficient matrices for internal nodes
-        num_internal = self.nx - 2
+        # 结果存储字典
+        result = {
+            'times': [],
+            'solutions': [],
+            'method': 'Crank-Nicolson',
+            'dt': dt,
+            'r': r,
+            'time_elapsed': 0.0
+        }
         
-        # Left-hand side matrix A
-        banded_matrix_A = np.zeros((3, num_internal))
-        banded_matrix_A[0, 1:] = -r/2  # Upper diagonal
-        banded_matrix_A[1, :] = 1 + r  # Main diagonal
-        banded_matrix_A[2, :-1] = -r/2  # Lower diagonal
-        
-        # Storage for results
-        results = {'times': [], 'solutions': [], 'method': 'Crank-Nicolson'}
-        
-        # Store initial condition
+        # 存储初始条件
         if 0 in plot_times:
-            results['times'].append(0.0)
-            results['solutions'].append(u.copy())
+            result['times'].append(t)
+            result['solutions'].append(u.copy())
         
         start_time = time.time()
         
-        # Time stepping
-        for n in range(1, nt):
-            # Right-hand side vector
-            u_internal = u[1:-1]
-            rhs = (r/2) * u[:-2] + (1 - r) * u_internal + (r/2) * u[2:]
+        # 时间步进循环
+        while t < self.T_final:
+            if t + dt > self.T_final:
+                dt = self.T_final - t
+                r = self.alpha * dt / (self.dx**2)
             
-            # Solve tridiagonal system A * u^{n+1} = rhs
-            u_internal_new = scipy.linalg.solve_banded((1, 1), banded_matrix_A, rhs)
+            # 构建右端向量
+            rhs = np.zeros(self.nx - 2)
+            rhs = (r/2) * u[:-2] + (1 - r) * u[1:-1] + (r/2) * u[2:]
             
-            # Update solution
-            u[1:-1] = u_internal_new
-            u[0] = 0.0  # Boundary conditions
+            # 求解线性系统
+            u_internal = scipy.linalg.solve_banded((1, 1), A, rhs)
+            
+            # 更新解
+            u[1:-1] = u_internal
+            
+            # 应用边界条件
+            u[0] = 0.0
             u[-1] = 0.0
             
-            t = n * dt
+            t += dt
             
-            # Store solution at specified times
-            for plot_time in plot_times:
-                if abs(t - plot_time) < dt/2 and plot_time not in [res_t for res_t in results['times']]:
-                    results['times'].append(t)
-                    results['solutions'].append(u.copy())
+            # 存储指定时间点的解
+            for pt in plot_times:
+                if abs(t - pt) < dt/2 and pt not in result['times']:
+                    result['times'].append(t)
+                    result['solutions'].append(u.copy())
         
-        results['computation_time'] = time.time() - start_time
-        results['stability_parameter'] = r
+        end_time = time.time()
+        result['time_elapsed'] = end_time - start_time
         
-        return results
+        return result
     
     def _heat_equation_ode(self, t, u_internal):
         """
-        ODE system for solve_ivp method.
+        用于solve_ivp方法的ODE系统。
         
-        Args:
-            t (float): Current time
-            u_internal (np.ndarray): Internal node temperatures
+        参数:
+            t (float): 当前时间
+            u_internal (np.ndarray): 内部节点温度
             
-        Returns:
-            np.ndarray: Time derivatives for internal nodes
+        返回:
+            np.ndarray: 内部节点的时间导数
         """
-        # Reconstruct full solution with boundary conditions
-        u_full = np.concatenate(([0.0], u_internal, [0.0]))
+        # 重构包含边界条件的完整解
+        u_full = np.zeros(self.nx)
+        u_full[1:-1] = u_internal
         
-        # Compute second derivative using Laplacian
-        d2u_dx2 = laplace(u_full) / (self.dx**2)
+        # 计算空间二阶导数
+        d2u = laplace(u_full, mode='nearest') / (self.dx**2)
         
-        # Return derivatives for internal nodes only
-        return self.alpha * d2u_dx2[1:-1]
-def solve_with_solve_ivp(self, method='BDF', plot_times=None):
+        # 返回内部节点的时间导数
+        return self.alpha * d2u[1:-1]
+    
+    def solve_with_solve_ivp(self, method='BDF', plot_times=None):
         """
-        Solve using scipy.integrate.solve_ivp.
+        使用scipy.integrate.solve_ivp求解。
         
-        Args:
-            method (str): Integration method ('RK45', 'BDF', 'Radau', etc.)
-            plot_times (list): Time points for plotting
+        参数:
+            method (str): 积分方法（'RK45', 'BDF', 'Radau'等）
+            plot_times (list): 绘图时间点
             
-        Returns:
-            dict: Solution data including time points and temperature arrays
+        返回:
+            dict: 包含时间点和温度数组的解数据
         """
         if plot_times is None:
             plot_times = [0, 1, 5, 15, 25]
             
-        # Initial condition for internal nodes only
-        u0_internal = self.u_initial[1:-1]
+        # 提取内部节点初始条件
+        u0_internal = self.u_initial[1:-1].copy()
+        
+        # 结果存储字典
+        result = {
+            'times': [],
+            'solutions': [],
+            'method': f'solve_ivp ({method})',
+            'dt': 'adaptive',
+            'r': 'adaptive',
+            'time_elapsed': 0.0
+        }
         
         start_time = time.time()
         
-        # Solve ODE system
+        # 调用 solve_ivp 求解
         sol = solve_ivp(
             fun=self._heat_equation_ode,
             t_span=(0, self.T_final),
             y0=u0_internal,
             method=method,
-            t_eval=plot_times,
-            rtol=1e-8,
-            atol=1e-10
+            t_eval=plot_times
         )
         
-        computation_time = time.time() - start_time
+        end_time = time.time()
+        result['time_elapsed'] = end_time - start_time
         
-        # Reconstruct full solutions with boundary conditions
-        results = {
-            'times': sol.t.tolist(),
-            'solutions': [],
-            'method': f'solve_ivp ({method})',
-            'computation_time': computation_time
-        }
+        # 重构包含边界条件的完整解
+        for i, t in enumerate(sol.t):
+            u_full = np.zeros(self.nx)
+            u_full[1:-1] = sol.y[:, i]
+            result['times'].append(t)
+            result['solutions'].append(u_full)
         
-        for i in range(len(sol.t)):
-            u_full = np.concatenate(([0.0], sol.y[:, i], [0.0]))
-            results['solutions'].append(u_full)
-        
-        return results
-def compare_methods(self, dt_explicit=0.01, dt_implicit=0.1, dt_cn=0.5, 
+        return result
+    
+    def compare_methods(self, dt_explicit=0.01, dt_implicit=0.1, dt_cn=0.5, 
                        ivp_method='BDF', plot_times=None):
         """
-        Compare all four numerical methods.
+        比较所有四种数值方法。
         
-        Args:
-            dt_explicit (float): Time step for explicit method
-            dt_implicit (float): Time step for implicit method
-            dt_cn (float): Time step for Crank-Nicolson method
-            ivp_method (str): Integration method for solve_ivp
-            plot_times (list): Time points for comparison
+        参数:
+            dt_explicit (float): 显式方法时间步长
+            dt_implicit (float): 隐式方法时间步长
+            dt_cn (float): Crank-Nicolson方法时间步长
+            ivp_method (str): solve_ivp积分方法
+            plot_times (list): 比较时间点
             
-        Returns:
-            dict: Results from all methods
+        返回:
+            dict: 所有方法的结果
         """
         if plot_times is None:
             plot_times = [0, 1, 5, 15, 25]
             
-        print("Solving heat equation using four different methods...")
-        print(f"Domain: [0, {self.L}], Grid points: {self.nx}, Final time: {self.T_final}")
-        print(f"Thermal diffusivity: {self.alpha}")
-        print("-" * 60)
+        print(f"\n{'='*50}")
+        print("热传导方程数值解法比较")
+        print(f"空间点数: {self.nx}, 最终时间: {self.T_final}")
+        print(f"显式方法时间步长: {dt_explicit}")
+        print(f"隐式方法时间步长: {dt_implicit}")
+        print(f"Crank-Nicolson方法时间步长: {dt_cn}")
+        print(f"solve_ivp方法: {ivp_method}")
+        print(f"比较时间点: {plot_times}")
+        print('='*50)
         
-        # Solve with all methods
-        methods_results = {}
+        # 调用四种求解方法
+        results = {}
+        results['explicit'] = self.solve_explicit(dt=dt_explicit, plot_times=plot_times)
+        results['implicit'] = self.solve_implicit(dt=dt_implicit, plot_times=plot_times)
+        results['crank_nicolson'] = self.solve_crank_nicolson(dt=dt_cn, plot_times=plot_times)
+        results['solve_ivp'] = self.solve_with_solve_ivp(method=ivp_method, plot_times=plot_times)
         
-        # Explicit method
-        print("1. Explicit finite difference (FTCS)...")
-        methods_results['explicit'] = self.solve_explicit(dt_explicit, plot_times)
-        print(f"   Computation time: {methods_results['explicit']['computation_time']:.4f} s")
-        print(f"   Stability parameter r: {methods_results['explicit']['stability_parameter']:.4f}")
+        # 打印每种方法的计算时间和稳定性参数
+        print("\n方法性能比较:")
+        print("-"*70)
+        print(f"{'方法':<25} | {'时间步长':<10} | {'稳定性参数(r)':<15} | {'计算时间(秒)':<15}")
+        print("-"*70)
         
-        # Implicit method
-        print("2. Implicit finite difference (BTCS)...")
-        methods_results['implicit'] = self.solve_implicit(dt_implicit, plot_times)
-        print(f"   Computation time: {methods_results['implicit']['computation_time']:.4f} s")
-        print(f"   Stability parameter r: {methods_results['implicit']['stability_parameter']:.4f}")
+        for key, res in results.items():
+            method_name = res['method']
+            dt_val = str(res['dt'])
+            r_val = str(res['r'])
+            time_val = f"{res['time_elapsed']:.6f}"
+            print(f"{method_name:<25} | {dt_val:<10} | {r_val:<15} | {time_val:<15}")
         
-        # Crank-Nicolson method
-        print("3. Crank-Nicolson method...")
-        methods_results['crank_nicolson'] = self.solve_crank_nicolson(dt_cn, plot_times)
-        print(f"   Computation time: {methods_results['crank_nicolson']['computation_time']:.4f} s")
-        print(f"   Stability parameter r: {methods_results['crank_nicolson']['stability_parameter']:.4f}")
+        print('='*50)
         
-        # solve_ivp method
-        print(f"4. solve_ivp method ({ivp_method})...")
-        methods_results['solve_ivp'] = self.solve_with_solve_ivp(ivp_method, plot_times)
-        print(f"   Computation time: {methods_results['solve_ivp']['computation_time']:.4f} s")
-        
-        print("-" * 60)
-        print("All methods completed successfully!")
-        
-        return methods_results
+        return results
     
     def plot_comparison(self, methods_results, save_figure=False, filename='heat_equation_comparison.png'):
         """
-        Plot comparison of all methods.
+        绘制所有方法的比较图。
         
-        Args:
-            methods_results (dict): Results from compare_methods
-            save_figure (bool): Whether to save the figure
-            filename (str): Filename for saved figure
+        参数:
+            methods_results (dict): compare_methods的结果
+            save_figure (bool): 是否保存图像
+            filename (str): 保存的文件名
         """
-        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-        axes = axes.flatten()
+        plt.figure(figsize=(15, 10))
         
-        method_names = ['explicit', 'implicit', 'crank_nicolson', 'solve_ivp']
-        colors = ['blue', 'red', 'green', 'orange', 'purple']
+        # 获取所有时间点（以第一个方法为准）
+        times = list(methods_results.values())[0]['times']
         
-        for idx, method_name in enumerate(method_names):
-            ax = axes[idx]
-            results = methods_results[method_name]
+        # 创建2x2子图
+        for i, t in enumerate(times):
+            plt.subplot(2, 2, i+1)
             
-            # Plot solutions at different times
-            for i, (t, u) in enumerate(zip(results['times'], results['solutions'])):
-                ax.plot(self.x, u, color=colors[i], label=f't = {t:.1f}', linewidth=2)
+            # 绘制每种方法在该时间点的解
+            for method_name, result in methods_results.items():
+                # 找到最接近的时间索引
+                idx = np.argmin(np.abs(np.array(result['times']) - t))
+                u = result['solutions'][idx]
+                plt.plot(self.x, u, label=f"{result['method']} (t={result['times'][idx]:.2f})")
             
-            ax.set_title(f"{results['method']}\n(Time: {results['computation_time']:.4f} s)")
-            ax.set_xlabel('Position x')
-            ax.set_ylabel('Temperature u(x,t)')
-            ax.grid(True, alpha=0.3)
-            ax.legend()
-            ax.set_xlim(0, self.L)
-            ax.set_ylim(-0.1, 1.1)
+            plt.title(f"时间 t = {t:.2f}")
+            plt.xlabel('位置 x')
+            plt.ylabel('温度 u')
+            plt.grid(True)
+            plt.legend()
         
         plt.tight_layout()
         
         if save_figure:
-            plt.savefig(filename, dpi=300, bbox_inches='tight')
-            print(f"Figure saved as {filename}")
+            plt.savefig(filename, dpi=300)
+            print(f"图像已保存为 {filename}")
         
         plt.show()
-
- def analyze_accuracy(self, methods_results, reference_method='solve_ivp'):
+    
+    def analyze_accuracy(self, methods_results, reference_method='solve_ivp'):
         """
-        Analyze the accuracy of different methods.
+        分析不同方法的精度。
         
-        Args:
-            methods_results (dict): Results from compare_methods
-            reference_method (str): Method to use as reference
+        参数:
+            methods_results (dict): compare_methods的结果
+            reference_method (str): 参考方法
             
-        Returns:
-            dict: Accuracy analysis results
+        返回:
+            dict: 精度分析结果
         """
+        # 验证参考方法存在
         if reference_method not in methods_results:
-            raise ValueError(f"Reference method '{reference_method}' not found in results")
+            print(f"错误: 参考方法 '{reference_method}' 不存在!")
+            return None
         
-        reference = methods_results[reference_method]
-        accuracy_results = {}
+        # 获取参考解
+        ref_result = methods_results[reference_method]
         
-        print(f"\nAccuracy Analysis (Reference: {reference['method']})")
-        print("-" * 50)
+        # 精度分析结果字典
+        accuracy = {}
         
-        for method_name, results in methods_results.items():
-            if method_name == reference_method:
-                continue
+        print("\n精度分析 (以 {} 为参考):".format(ref_result['method']))
+        print("-"*70)
+        print(f"{'方法':<25} | {'最大误差':<15} | {'平均绝对误差':<15} | {'均方根误差':<15}")
+        print("-"*70)
+        
+        for key, result in methods_results.items():
+            if key == reference_method:
+                continue  # 跳过参考方法本身
                 
-            errors = []
-            # Align solutions by time points (find closest match)
-            for ref_t, ref_u in zip(reference['times'], reference['solutions']):
-                # Find closest solution in test method
-                idx = np.argmin(np.abs(np.array(results['times']) - ref_t))
-                test_u = results['solutions'][idx]
-                error = np.linalg.norm(ref_u - test_u, ord=2)
-                errors.append(error)
+            max_errors = []
+            mae_errors = []
+            rmse_errors = []
             
-            max_error = max(errors) if errors else 0
-            avg_error = np.mean(errors) if errors else 0
+            # 对每个时间点计算误差
+            for t in result['times']:
+                # 找到参考解中最接近的时间点
+                ref_idx = np.argmin(np.abs(np.array(ref_result['times']) - t))
+                u_ref = ref_result['solutions'][ref_idx]
+                
+                # 找到当前方法中对应时间点的解
+                idx = np.argmin(np.abs(np.array(result['times']) - t))
+                u = result['solutions'][idx]
+                
+                # 计算误差指标
+                error = np.abs(u - u_ref)
+                max_errors.append(np.max(error))
+                mae_errors.append(np.mean(error))
+                rmse_errors.append(np.sqrt(np.mean(error**2)))
             
-            accuracy_results[method_name] = {
-                'max_error': max_error,
-                'avg_error': avg_error,
-                'errors': errors
+            # 计算平均误差
+            avg_max_error = np.mean(max_errors)
+            avg_mae = np.mean(mae_errors)
+            avg_rmse = np.mean(rmse_errors)
+            
+            # 存储结果
+            accuracy[key] = {
+                'max_error': avg_max_error,
+                'mae': avg_mae,
+                'rmse': avg_rmse
             }
             
-            print(f"{results['method']:25} - Max Error: {max_error:.2e}, Avg Error: {avg_error:.2e}")
+            print(f"{result['method']:<25} | {avg_max_error:<15.6f} | {avg_mae:<15.6f} | {avg_rmse:<15.6f}")
         
-        return accuracy_results
+        print('='*50)
+        return accuracy
 
 
 def main():
     """
-    Demonstration of the HeatEquationSolver class.
+    HeatEquationSolver类的演示。
     """
-    # Create solver instance
-    solver = HeatEquationSolver(L=20.0, alpha=10.0, nx=21, T_final=25.0)
+    # 创建求解器实例
+    solver = HeatEquationSolver(L=20.0, alpha=10.0, nx=201, T_final=25.0)
     
-    # Compare all methods
-    plot_times = [0, 1, 5, 15, 25]
+    # 比较所有方法
     results = solver.compare_methods(
-        dt_explicit=0.01,
-        dt_implicit=0.1, 
+        dt_explicit=0.001,  # 显式方法需要较小的时间步长
+        dt_implicit=0.1,
         dt_cn=0.5,
         ivp_method='BDF',
-        plot_times=plot_times
+        plot_times=[0, 1, 5, 15, 25]
     )
     
-    # Plot comparison
+    # 绘制比较图
     solver.plot_comparison(results, save_figure=True)
     
-    # Analyze accuracy
+    # 分析精度（以solve_ivp为参考）
     accuracy = solver.analyze_accuracy(results, reference_method='solve_ivp')
     
     return solver, results, accuracy
@@ -472,5 +548,3 @@ def main():
 
 if __name__ == "__main__":
     solver, results, accuracy = main()
-
-
