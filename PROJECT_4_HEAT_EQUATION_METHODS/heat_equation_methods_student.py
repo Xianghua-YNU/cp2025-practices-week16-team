@@ -1,4 +1,3 @@
-
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import laplace
@@ -51,7 +50,7 @@ class HeatEquationSolver:
         u0[0] = 0.0
         u0[-1] = 0.0
         return u0
-
+        
 def solve_explicit(self, dt=0.01, plot_times=None):
         """
         Solve using explicit finite difference method (FTCS).
@@ -260,7 +259,6 @@ def solve_crank_nicolson(self, dt=0.5, plot_times=None):
         
         # Return derivatives for internal nodes only
         return self.alpha * d2u_dx2[1:-1]
-
 def solve_with_solve_ivp(self, method='BDF', plot_times=None):
         """
         Solve using scipy.integrate.solve_ivp.
@@ -306,7 +304,6 @@ def solve_with_solve_ivp(self, method='BDF', plot_times=None):
             results['solutions'].append(u_full)
         
         return results
-
 def compare_methods(self, dt_explicit=0.01, dt_implicit=0.1, dt_cn=0.5, 
                        ivp_method='BDF', plot_times=None):
         """
@@ -400,7 +397,7 @@ def compare_methods(self, dt_explicit=0.01, dt_implicit=0.1, dt_cn=0.5,
         
         plt.show()
 
-def analyze_accuracy(self, methods_results, reference_method='solve_ivp'):
+ def analyze_accuracy(self, methods_results, reference_method='solve_ivp'):
         """
         Analyze the accuracy of different methods.
         
@@ -475,3 +472,5 @@ def main():
 
 if __name__ == "__main__":
     solver, results, accuracy = main()
+
+
