@@ -141,3 +141,9 @@ if __name__ == "__main__":
 
     print("\n3. 数值解稳定性分析")
     stability_analysis()
+    
+    print("\n4. 不同初始条件模拟")
+    different_initial_condition()
+    
+    print("\n5. 包含牛顿冷却定律的热传导")
+    heat_diffusion_with_cooling()
