@@ -1,13 +1,7 @@
 #!/usr/bin/env python3
 """
 Heat Equation Solver with Multiple Numerical Methods
-File: heat_equation_methods_solution.py
-
-This module implements four different numerical methods to solve the 1D heat equation:
-1. Explicit finite difference (FTCS)
-2. Implicit finite difference (BTCS)
-3. Crank-Nicolson method
-4. scipy.integrate.solve_ivp method
+Alternative Implementation with Same Functionality
 """
 
 import numpy as np
@@ -19,467 +13,474 @@ import time
 
 class HeatEquationSolver:
     """
-    A comprehensive solver for the 1D heat equation using multiple numerical methods.
-    
-    The heat equation: du/dt = alpha * d²u/dx²
-    Boundary conditions: u(0,t) = 0, u(L,t) = 0
-    Initial condition: u(x,0) = phi(x)
+    Solver for the 1D heat equation using various numerical techniques
     """
     
-    def __init__(self, L=20.0, alpha=10.0, nx=21, T_final=25.0):
+    def __init__(self, domain_length=20.0, diffusivity=10.0, grid_points=21, end_time=25.0):
         """
-        Initialize the heat equation solver.
+        Initialize the heat equation solver
         
-        Args:
-            L (float): Domain length [0, L]
-            alpha (float): Thermal diffusivity coefficient
-            nx (int): Number of spatial grid points
-            T_final (float): Final simulation time
+        Parameters:
+            domain_length (float): Length of the spatial domain [0, L]
+            diffusivity (float): Thermal diffusion coefficient
+            grid_points (int): Number of spatial discretization points
+            end_time (float): Simulation end time
         """
-        self.L = L
-        self.alpha = alpha
-        self.nx = nx
-        self.T_final = T_final
+        self.domain_length = domain_length
+        self.diffusivity = diffusivity
+        self.grid_points = grid_points
+        self.end_time = end_time
         
-        # Spatial grid
-        self.x = np.linspace(0, L, nx)
-        self.dx = L / (nx - 1)
+        # Create spatial grid
+        self.spatial_grid = np.linspace(0, domain_length, grid_points)
+        self.dx = domain_length / (grid_points - 1)
         
-        # Initialize solution array
-        self.u_initial = self._set_initial_condition()
-        
-    def _set_initial_condition(self):
-        """
-        Set the initial condition: u(x,0) = 1 for 10 <= x <= 11, 0 otherwise.
-        
-        Returns:
-            np.ndarray: Initial temperature distribution
-        """
-        u0 = np.zeros(self.nx)
-        mask = (self.x >= 10) & (self.x <= 11)
-        u0[mask] = 1.0
-        # Apply boundary conditions
-        u0[0] = 0.0
-        u0[-1] = 0.0
-        return u0
+        # Set initial temperature distribution
+        self.initial_temp = self._initialize_temp_profile()
     
-    def solve_explicit(self, dt=0.01, plot_times=None):
+    def _initialize_temp_profile(self):
         """
-        Solve using explicit finite difference method (FTCS).
-        
-        Args:
-            dt (float): Time step size
-            plot_times (list): Time points for plotting
-            
-        Returns:
-            dict: Solution data including time points and temperature arrays
+        Create the initial temperature distribution:
+        u(x,0) = 1 for 10 <= x <= 11, 0 otherwise
         """
-        if plot_times is None:
-            plot_times = [0, 1, 5, 15, 25]
-            
-        # Stability check
-        r = self.alpha * dt / (self.dx**2)
-        if r > 0.5:
-            print(f"Warning: Stability condition violated! r = {r:.4f} > 0.5")
-            print(f"Consider reducing dt to < {0.5 * self.dx**2 / self.alpha:.6f}")
-        
-        # Initialize
-        u = self.u_initial.copy()
-        t = 0.0
-        nt = int(self.T_final / dt) + 1
-        
-        # Storage for results
-        results = {'times': [], 'solutions': [], 'method': 'Explicit FTCS'}
-        
-        # Store initial condition
-        if 0 in plot_times:
-            results['times'].append(0.0)
-            results['solutions'].append(u.copy())
-        
-        start_time = time.time()
-        
-        # Time stepping
-        for n in range(1, nt):
-            # Apply Laplacian using scipy.ndimage.laplace
-            du_dt = r * laplace(u)
-            u += du_dt
-            
-            # Apply boundary conditions
-            u[0] = 0.0
-            u[-1] = 0.0
-            
-            t = n * dt
-            
-            # Store solution at specified times
-            for plot_time in plot_times:
-                if abs(t - plot_time) < dt/2 and plot_time not in [res_t for res_t in results['times']]:
-                    results['times'].append(t)
-                    results['solutions'].append(u.copy())
-        
-        results['computation_time'] = time.time() - start_time
-        results['stability_parameter'] = r
-        
-        return results
+        temp = np.zeros(self.grid_points)
+        # Set initial pulse between x=10 and x=11
+        temp[(self.spatial_grid >= 10) & (self.spatial_grid <= 11)] = 1.0
+        # Apply fixed boundary conditions
+        temp[0] = 0.0
+        temp[-1] = 0.0
+        return temp
     
-    def solve_implicit(self, dt=0.1, plot_times=None):
+    def explicit_method(self, time_step=0.01, output_times=None):
         """
-        Solve using implicit finite difference method (BTCS).
+        Solve using explicit finite difference (FTCS) scheme
         
-        Args:
-            dt (float): Time step size
-            plot_times (list): Time points for plotting
+        Parameters:
+            time_step (float): Time increment
+            output_times (list): Times to record solution
             
         Returns:
-            dict: Solution data including time points and temperature arrays
+            dict: Solution data with times and temperature profiles
         """
-        if plot_times is None:
-            plot_times = [0, 1, 5, 15, 25]
+        if output_times is None:
+            output_times = [0, 1, 5, 15, 25]
             
-        # Parameters
-        r = self.alpha * dt / (self.dx**2)
-        nt = int(self.T_final / dt) + 1
+        # Calculate stability parameter
+        r_val = self.diffusivity * time_step / (self.dx**2)
+        if r_val > 0.5:
+            print(f"Stability warning: r = {r_val:.4f} > 0.5")
         
-        # Initialize
-        u = self.u_initial.copy()
+        # Initialize temperature array
+        temp = self.initial_temp.copy()
+        current_time = 0.0
+        total_steps = int(self.end_time / time_step) + 1
         
-        # Build tridiagonal matrix for internal nodes
-        num_internal = self.nx - 2
-        banded_matrix = np.zeros((3, num_internal))
-        banded_matrix[0, 1:] = -r  # Upper diagonal
-        banded_matrix[1, :] = 1 + 2*r  # Main diagonal
-        banded_matrix[2, :-1] = -r  # Lower diagonal
+        # Setup results container
+        solution_data = {
+            'times': [], 
+            'profiles': [], 
+            'method': 'Explicit FTCS',
+            'execution_time': 0.0,
+            'r_value': r_val
+        }
         
-        # Storage for results
-        results = {'times': [], 'solutions': [], 'method': 'Implicit BTCS'}
+        # Record initial condition if requested
+        if 0 in output_times:
+            solution_data['times'].append(0.0)
+            solution_data['profiles'].append(temp.copy())
         
-        # Store initial condition
-        if 0 in plot_times:
-            results['times'].append(0.0)
-            results['solutions'].append(u.copy())
+        start = time.perf_counter()
         
-        start_time = time.time()
-        
-        # Time stepping
-        for n in range(1, nt):
-            # Right-hand side (internal nodes only)
-            rhs = u[1:-1].copy()
+        # Time iteration loop
+        for step in range(1, total_steps):
+            # Compute spatial derivative using Laplacian
+            d2u = laplace(temp)
+            temp += r_val * d2u
             
-            # Solve tridiagonal system
-            u_internal_new = scipy.linalg.solve_banded((1, 1), banded_matrix, rhs)
+            # Maintain boundary conditions
+            temp[0] = 0.0
+            temp[-1] = 0.0
             
-            # Update solution
-            u[1:-1] = u_internal_new
-            u[0] = 0.0  # Boundary conditions
-            u[-1] = 0.0
+            current_time = step * time_step
             
-            t = n * dt
-            
-            # Store solution at specified times
-            for plot_time in plot_times:
-                if abs(t - plot_time) < dt/2 and plot_time not in [res_t for res_t in results['times']]:
-                    results['times'].append(t)
-                    results['solutions'].append(u.copy())
+            # Save solution at requested times
+            for t in output_times:
+                if abs(current_time - t) < time_step/2 and t not in solution_data['times']:
+                    solution_data['times'].append(current_time)
+                    solution_data['profiles'].append(temp.copy())
         
-        results['computation_time'] = time.time() - start_time
-        results['stability_parameter'] = r
+        solution_data['execution_time'] = time.perf_counter() - start
         
-        return results
+        return solution_data
     
-    def solve_crank_nicolson(self, dt=0.5, plot_times=None):
+    def implicit_method(self, time_step=0.1, output_times=None):
         """
-        Solve using Crank-Nicolson method.
+        Solve using implicit finite difference (BTCS) scheme
         
-        Args:
-            dt (float): Time step size
-            plot_times (list): Time points for plotting
+        Parameters:
+            time_step (float): Time increment
+            output_times (list): Times to record solution
             
         Returns:
-            dict: Solution data including time points and temperature arrays
+            dict: Solution data with times and temperature profiles
         """
-        if plot_times is None:
-            plot_times = [0, 1, 5, 15, 25]
+        if output_times is None:
+            output_times = [0, 1, 5, 15, 25]
             
-        # Parameters
-        r = self.alpha * dt / (self.dx**2)
-        nt = int(self.T_final / dt) + 1
+        # Calculate parameter
+        r_val = self.diffusivity * time_step / (self.dx**2)
+        total_steps = int(self.end_time / time_step) + 1
         
-        # Initialize
-        u = self.u_initial.copy()
+        # Initialize temperature array
+        temp = self.initial_temp.copy()
         
-        # Build coefficient matrices for internal nodes
-        num_internal = self.nx - 2
+        # Construct tridiagonal system for internal points
+        internal_nodes = self.grid_points - 2
+        matrix = np.zeros((3, internal_nodes))
+        matrix[0, 1:] = -r_val  # Upper diagonal
+        matrix[1, :] = 1 + 2*r_val  # Main diagonal
+        matrix[2, :-1] = -r_val  # Lower diagonal
         
-        # Left-hand side matrix A
-        banded_matrix_A = np.zeros((3, num_internal))
-        banded_matrix_A[0, 1:] = -r/2  # Upper diagonal
-        banded_matrix_A[1, :] = 1 + r  # Main diagonal
-        banded_matrix_A[2, :-1] = -r/2  # Lower diagonal
+        # Setup results container
+        solution_data = {
+            'times': [], 
+            'profiles': [], 
+            'method': 'Implicit BTCS',
+            'execution_time': 0.0,
+            'r_value': r_val
+        }
         
-        # Storage for results
-        results = {'times': [], 'solutions': [], 'method': 'Crank-Nicolson'}
+        # Record initial condition if requested
+        if 0 in output_times:
+            solution_data['times'].append(0.0)
+            solution_data['profiles'].append(temp.copy())
         
-        # Store initial condition
-        if 0 in plot_times:
-            results['times'].append(0.0)
-            results['solutions'].append(u.copy())
+        start = time.perf_counter()
         
-        start_time = time.time()
-        
-        # Time stepping
-        for n in range(1, nt):
-            # Right-hand side vector
-            u_internal = u[1:-1]
-            rhs = (r/2) * u[:-2] + (1 - r) * u_internal + (r/2) * u[2:]
+        # Time iteration loop
+        for step in range(1, total_steps):
+            # Prepare right-hand side vector
+            rhs_vector = temp[1:-1].copy()
             
-            # Solve tridiagonal system A * u^{n+1} = rhs
-            u_internal_new = scipy.linalg.solve_banded((1, 1), banded_matrix_A, rhs)
+            # Solve linear system
+            internal_temp = scipy.linalg.solve_banded((1, 1), matrix, rhs_vector)
             
-            # Update solution
-            u[1:-1] = u_internal_new
-            u[0] = 0.0  # Boundary conditions
-            u[-1] = 0.0
+            # Update solution with boundary conditions
+            temp[1:-1] = internal_temp
+            temp[0] = 0.0
+            temp[-1] = 0.0
             
-            t = n * dt
+            current_time = step * time_step
             
-            # Store solution at specified times
-            for plot_time in plot_times:
-                if abs(t - plot_time) < dt/2 and plot_time not in [res_t for res_t in results['times']]:
-                    results['times'].append(t)
-                    results['solutions'].append(u.copy())
+            # Save solution at requested times
+            for t in output_times:
+                if abs(current_time - t) < time_step/2 and t not in solution_data['times']:
+                    solution_data['times'].append(current_time)
+                    solution_data['profiles'].append(temp.copy())
         
-        results['computation_time'] = time.time() - start_time
-        results['stability_parameter'] = r
+        solution_data['execution_time'] = time.perf_counter() - start
         
-        return results
+        return solution_data
     
-    def _heat_equation_ode(self, t, u_internal):
+    def crank_nicolson_method(self, time_step=0.5, output_times=None):
         """
-        ODE system for solve_ivp method.
+        Solve using Crank-Nicolson scheme
         
-        Args:
-            t (float): Current time
-            u_internal (np.ndarray): Internal node temperatures
+        Parameters:
+            time_step (float): Time increment
+            output_times (list): Times to record solution
             
         Returns:
-            np.ndarray: Time derivatives for internal nodes
+            dict: Solution data with times and temperature profiles
         """
-        # Reconstruct full solution with boundary conditions
-        u_full = np.concatenate(([0.0], u_internal, [0.0]))
+        if output_times is None:
+            output_times = [0, 1, 5, 15, 25]
+            
+        # Calculate parameter
+        r_val = self.diffusivity * time_step / (self.dx**2)
+        total_steps = int(self.end_time / time_step) + 1
         
-        # Compute second derivative using Laplacian
-        d2u_dx2 = laplace(u_full) / (self.dx**2)
+        # Initialize temperature array
+        temp = self.initial_temp.copy()
         
-        # Return derivatives for internal nodes only
-        return self.alpha * d2u_dx2[1:-1]
+        # Construct tridiagonal system for Crank-Nicolson
+        internal_nodes = self.grid_points - 2
+        matrix = np.zeros((3, internal_nodes))
+        matrix[0, 1:] = -r_val/2  # Upper diagonal
+        matrix[1, :] = 1 + r_val  # Main diagonal
+        matrix[2, :-1] = -r_val/2  # Lower diagonal
+        
+        # Setup results container
+        solution_data = {
+            'times': [], 
+            'profiles': [], 
+            'method': 'Crank-Nicolson',
+            'execution_time': 0.0,
+            'r_value': r_val
+        }
+        
+        # Record initial condition if requested
+        if 0 in output_times:
+            solution_data['times'].append(0.0)
+            solution_data['profiles'].append(temp.copy())
+        
+        start = time.perf_counter()
+        
+        # Time iteration loop
+        for step in range(1, total_steps):
+            # Prepare right-hand side vector
+            internal_temp = temp[1:-1]
+            rhs_vector = (r_val/2) * temp[:-2] + (1 - r_val) * internal_temp + (r_val/2) * temp[2:]
+            
+            # Solve linear system
+            internal_temp = scipy.linalg.solve_banded((1, 1), matrix, rhs_vector)
+            
+            # Update solution with boundary conditions
+            temp[1:-1] = internal_temp
+            temp[0] = 0.0
+            temp[-1] = 0.0
+            
+            current_time = step * time_step
+            
+            # Save solution at requested times
+            for t in output_times:
+                if abs(current_time - t) < time_step/2 and t not in solution_data['times']:
+                    solution_data['times'].append(current_time)
+                    solution_data['profiles'].append(temp.copy())
+        
+        solution_data['execution_time'] = time.perf_counter() - start
+        
+        return solution_data
     
-    def solve_with_solve_ivp(self, method='BDF', plot_times=None):
+    def _system_derivatives(self, time_point, internal_temp):
         """
-        Solve using scipy.integrate.solve_ivp.
+        Define ODE system for solve_ivp method
         
-        Args:
-            method (str): Integration method ('RK45', 'BDF', 'Radau', etc.)
-            plot_times (list): Time points for plotting
+        Parameters:
+            time_point (float): Current time
+            internal_temp (np.array): Temperatures at internal nodes
             
         Returns:
-            dict: Solution data including time points and temperature arrays
+            np.array: Time derivatives for internal nodes
         """
-        if plot_times is None:
-            plot_times = [0, 1, 5, 15, 25]
+        # Reconstruct full solution with boundaries
+        full_temp = np.concatenate(([0.0], internal_temp, [0.0]))
+        
+        # Compute second spatial derivative
+        spatial_deriv = laplace(full_temp) / (self.dx**2)
+        
+        # Return time derivatives for internal nodes
+        return self.diffusivity * spatial_deriv[1:-1]
+    
+    def solve_with_ode_integrator(self, solver_method='BDF', output_times=None):
+        """
+        Solve using scipy's ODE integrator
+        
+        Parameters:
+            solver_method (str): Integration algorithm
+            output_times (list): Times to record solution
             
-        # Initial condition for internal nodes only
-        u0_internal = self.u_initial[1:-1]
+        Returns:
+            dict: Solution data with times and temperature profiles
+        """
+        if output_times is None:
+            output_times = [0, 1, 5, 15, 25]
+            
+        # Initial condition for internal nodes
+        initial_internal = self.initial_temp[1:-1]
         
-        start_time = time.time()
+        start = time.perf_counter()
         
-        # Solve ODE system
-        sol = solve_ivp(
-            fun=self._heat_equation_ode,
-            t_span=(0, self.T_final),
-            y0=u0_internal,
-            method=method,
-            t_eval=plot_times,
+        # Solve the ODE system
+        solution = solve_ivp(
+            fun=self._system_derivatives,
+            t_span=(0, self.end_time),
+            y0=initial_internal,
+            method=solver_method,
+            t_eval=output_times,
             rtol=1e-8,
             atol=1e-10
         )
         
-        computation_time = time.time() - start_time
+        elapsed = time.perf_counter() - start
         
-        # Reconstruct full solutions with boundary conditions
-        results = {
-            'times': sol.t.tolist(),
-            'solutions': [],
-            'method': f'solve_ivp ({method})',
-            'computation_time': computation_time
+        # Reconstruct full solutions
+        solution_data = {
+            'times': solution.t.tolist(),
+            'profiles': [],
+            'method': f'ODE Integrator ({solver_method})',
+            'execution_time': elapsed,
+            'r_value': None
         }
         
-        for i in range(len(sol.t)):
-            u_full = np.concatenate(([0.0], sol.y[:, i], [0.0]))
-            results['solutions'].append(u_full)
+        # Add boundary conditions to each solution
+        for i in range(len(solution.t)):
+            full_profile = np.concatenate(([0.0], solution.y[:, i], [0.0]))
+            solution_data['profiles'].append(full_profile)
         
-        return results
+        return solution_data
     
-    def compare_methods(self, dt_explicit=0.01, dt_implicit=0.1, dt_cn=0.5, 
-                       ivp_method='BDF', plot_times=None):
+    def compare_solution_methods(self, explicit_dt=0.01, implicit_dt=0.1, cn_dt=0.5, 
+                                ode_method='BDF', output_times=None):
         """
-        Compare all four numerical methods.
+        Execute and compare all solution methods
         
-        Args:
-            dt_explicit (float): Time step for explicit method
-            dt_implicit (float): Time step for implicit method
-            dt_cn (float): Time step for Crank-Nicolson method
-            ivp_method (str): Integration method for solve_ivp
-            plot_times (list): Time points for comparison
+        Parameters:
+            explicit_dt (float): Time step for explicit method
+            implicit_dt (float): Time step for implicit method
+            cn_dt (float): Time step for Crank-Nicolson method
+            ode_method (str): Method for ODE solver
+            output_times (list): Times to compare solutions
             
         Returns:
             dict: Results from all methods
         """
-        if plot_times is None:
-            plot_times = [0, 1, 5, 15, 25]
+        if output_times is None:
+            output_times = [0, 1, 5, 15, 25]
             
-        print("Solving heat equation using four different methods...")
-        print(f"Domain: [0, {self.L}], Grid points: {self.nx}, Final time: {self.T_final}")
-        print(f"Thermal diffusivity: {self.alpha}")
+        print("Solving heat equation with multiple methods...")
+        print(f"Domain: [0, {self.domain_length}], Points: {self.grid_points}")
+        print(f"Diffusivity: {self.diffusivity}, End time: {self.end_time}")
         print("-" * 60)
         
-        # Solve with all methods
-        methods_results = {}
+        # Execute all solution methods
+        results = {}
         
-        # Explicit method
-        print("1. Explicit finite difference (FTCS)...")
-        methods_results['explicit'] = self.solve_explicit(dt_explicit, plot_times)
-        print(f"   Computation time: {methods_results['explicit']['computation_time']:.4f} s")
-        print(f"   Stability parameter r: {methods_results['explicit']['stability_parameter']:.4f}")
+        print("1. Explicit finite difference method...")
+        results['explicit'] = self.explicit_method(explicit_dt, output_times)
+        print(f"   Time: {results['explicit']['execution_time']:.4f}s, r: {results['explicit']['r_value']:.4f}")
         
-        # Implicit method
-        print("2. Implicit finite difference (BTCS)...")
-        methods_results['implicit'] = self.solve_implicit(dt_implicit, plot_times)
-        print(f"   Computation time: {methods_results['implicit']['computation_time']:.4f} s")
-        print(f"   Stability parameter r: {methods_results['implicit']['stability_parameter']:.4f}")
+        print("2. Implicit finite difference method...")
+        results['implicit'] = self.implicit_method(implicit_dt, output_times)
+        print(f"   Time: {results['implicit']['execution_time']:.4f}s, r: {results['implicit']['r_value']:.4f}")
         
-        # Crank-Nicolson method
         print("3. Crank-Nicolson method...")
-        methods_results['crank_nicolson'] = self.solve_crank_nicolson(dt_cn, plot_times)
-        print(f"   Computation time: {methods_results['crank_nicolson']['computation_time']:.4f} s")
-        print(f"   Stability parameter r: {methods_results['crank_nicolson']['stability_parameter']:.4f}")
+        results['crank_nicolson'] = self.crank_nicolson_method(cn_dt, output_times)
+        print(f"   Time: {results['crank_nicolson']['execution_time']:.4f}s, r: {results['crank_nicolson']['r_value']:.4f}")
         
-        # solve_ivp method
-        print(f"4. solve_ivp method ({ivp_method})...")
-        methods_results['solve_ivp'] = self.solve_with_solve_ivp(ivp_method, plot_times)
-        print(f"   Computation time: {methods_results['solve_ivp']['computation_time']:.4f} s")
+        print(f"4. ODE solver ({ode_method})...")
+        results['ode_solver'] = self.solve_with_ode_integrator(ode_method, output_times)
+        print(f"   Time: {results['ode_solver']['execution_time']:.4f}s")
         
         print("-" * 60)
         print("All methods completed successfully!")
         
-        return methods_results
+        return results
     
-    def plot_comparison(self, methods_results, save_figure=False, filename='heat_equation_comparison.png'):
+    def visualize_comparison(self, solution_data, save_plot=False, filename='heat_equation_comparison.png'):
         """
-        Plot comparison of all methods.
+        Create visual comparison of solution methods
         
-        Args:
-            methods_results (dict): Results from compare_methods
-            save_figure (bool): Whether to save the figure
-            filename (str): Filename for saved figure
+        Parameters:
+            solution_data (dict): Results from comparison
+            save_plot (bool): Save figure to file
+            filename (str): Output filename
         """
         fig, axes = plt.subplots(2, 2, figsize=(15, 12))
         axes = axes.flatten()
         
-        method_names = ['explicit', 'implicit', 'crank_nicolson', 'solve_ivp']
-        colors = ['blue', 'red', 'green', 'orange', 'purple']
+        method_keys = ['explicit', 'implicit', 'crank_nicolson', 'ode_solver']
+        color_palette = ['blue', 'red', 'green', 'orange', 'purple']
         
-        for idx, method_name in enumerate(method_names):
+        for idx, method_key in enumerate(method_keys):
             ax = axes[idx]
-            results = methods_results[method_name]
+            data = solution_data[method_key]
             
-            # Plot solutions at different times
-            for i, (t, u) in enumerate(zip(results['times'], results['solutions'])):
-                ax.plot(self.x, u, color=colors[i], label=f't = {t:.1f}', linewidth=2)
+            # Plot each time snapshot
+            for i, (t, profile) in enumerate(zip(data['times'], data['profiles'])):
+                ax.plot(self.spatial_grid, profile, color=color_palette[i], 
+                        label=f't = {t:.1f}', linewidth=2)
             
-            ax.set_title(f"{results['method']}\n(Time: {results['computation_time']:.4f} s)")
-            ax.set_xlabel('Position x')
+            ax.set_title(f"{data['method']}\n(Time: {data['execution_time']:.4f}s)")
+            ax.set_xlabel('Position (x)')
             ax.set_ylabel('Temperature u(x,t)')
-            ax.grid(True, alpha=0.3)
+            ax.grid(alpha=0.3)
             ax.legend()
-            ax.set_xlim(0, self.L)
+            ax.set_xlim(0, self.domain_length)
             ax.set_ylim(-0.1, 1.1)
         
         plt.tight_layout()
         
-        if save_figure:
+        if save_plot:
             plt.savefig(filename, dpi=300, bbox_inches='tight')
             print(f"Figure saved as {filename}")
         
         plt.show()
     
-    def analyze_accuracy(self, methods_results, reference_method='solve_ivp'):
+    def evaluate_accuracy(self, solution_data, reference_method='ode_solver'):
         """
-        Analyze the accuracy of different methods.
+        Evaluate accuracy of methods relative to reference
         
-        Args:
-            methods_results (dict): Results from compare_methods
+        Parameters:
+            solution_data (dict): Results from comparison
             reference_method (str): Method to use as reference
             
         Returns:
-            dict: Accuracy analysis results
+            dict: Accuracy metrics
         """
-        if reference_method not in methods_results:
-            raise ValueError(f"Reference method '{reference_method}' not found in results")
+        if reference_method not in solution_data:
+            raise ValueError(f"Reference method '{reference_method}' not found")
         
-        reference = methods_results[reference_method]
-        accuracy_results = {}
+        reference = solution_data[reference_method]
+        accuracy_metrics = {}
         
-        print(f"\nAccuracy Analysis (Reference: {reference['method']})")
-        print("-" * 50)
+        print(f"\nAccuracy Evaluation (Reference: {reference['method']})")
+        print("-" * 60)
         
-        for method_name, results in methods_results.items():
-            if method_name == reference_method:
+        for method_key, data in solution_data.items():
+            if method_key == reference_method:
                 continue
                 
             errors = []
-            for i, (ref_sol, test_sol) in enumerate(zip(reference['solutions'], results['solutions'])):
-                if i < len(results['solutions']):
-                    error = np.linalg.norm(ref_sol - test_sol, ord=2)
+            # Compare each time point
+            for i, (ref_profile, test_profile) in enumerate(zip(reference['profiles'], data['profiles'])):
+                if i < len(data['profiles']):
+                    # Compute L2 norm of difference
+                    error = np.linalg.norm(ref_profile - test_profile)
                     errors.append(error)
             
-            max_error = max(errors) if errors else 0
-            avg_error = np.mean(errors) if errors else 0
+            max_err = max(errors) if errors else 0
+            avg_err = np.mean(errors) if errors else 0
             
-            accuracy_results[method_name] = {
-                'max_error': max_error,
-                'avg_error': avg_error,
-                'errors': errors
+            accuracy_metrics[method_key] = {
+                'max_error': max_err,
+                'average_error': avg_err,
+                'all_errors': errors
             }
             
-            print(f"{results['method']:25} - Max Error: {max_error:.2e}, Avg Error: {avg_error:.2e}")
+            print(f"{data['method']:30} - Max Error: {max_err:.2e}, Avg Error: {avg_err:.2e}")
         
-        return accuracy_results
+        return accuracy_metrics
 
 
-def main():
+def execute_demonstration():
     """
-    Demonstration of the HeatEquationSolver class.
+    Execute the heat equation solver demonstration
     """
-    # Create solver instance
-    solver = HeatEquationSolver(L=20.0, alpha=10.0, nx=21, T_final=25.0)
+    # Create solver with default parameters
+    solver = HeatEquationSolver(domain_length=20.0, diffusivity=10.0, 
+                               grid_points=21, end_time=25.0)
     
-    # Compare all methods
-    plot_times = [0, 1, 5, 15, 25]
-    results = solver.compare_methods(
-        dt_explicit=0.01,
-        dt_implicit=0.1, 
-        dt_cn=0.5,
-        ivp_method='BDF',
-        plot_times=plot_times
+    # Define output times
+    time_points = [0, 1, 5, 15, 25]
+    
+    # Compare all solution methods
+    comparison_results = solver.compare_solution_methods(
+        explicit_dt=0.01,
+        implicit_dt=0.1,
+        cn_dt=0.5,
+        ode_method='BDF',
+        output_times=time_points
     )
     
-    # Plot comparison
-    solver.plot_comparison(results, save_figure=True)
+    # Visualize results
+    solver.visualize_comparison(comparison_results, save_plot=True)
     
-    # Analyze accuracy
-    accuracy = solver.analyze_accuracy(results, reference_method='solve_ivp')
+    # Evaluate accuracy
+    accuracy_report = solver.evaluate_accuracy(comparison_results, reference_method='ode_solver')
     
-    return solver, results, accuracy
+    return solver, comparison_results, accuracy_report
 
 
 if __name__ == "__main__":
-    solver, results, accuracy = main()
+    solver_instance, results_data, accuracy_info = execute_demonstration()
